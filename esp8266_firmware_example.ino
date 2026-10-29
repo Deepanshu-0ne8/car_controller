@@ -21,14 +21,14 @@ const char* password = "11223345";
 
 // Target Server Configuration
 // To use Render Cloud:
-const char* server_host = "car-controller.onrender.com";
-const int   server_port = 443;
-const bool  use_ssl     = true;
+const char*    server_host = "car-controller.onrender.com";
+const uint16_t server_port = 443;
+const bool     use_ssl     = true;
 
 // To use Local Server (Uncomment when running locally on PC for lowest latency):
-// const char* server_host = "192.168.1.100"; // Replace with PC LAN IP
-// const int   server_port = 3000;
-// const bool  use_ssl     = false;
+// const char*    server_host = "192.168.1.100"; // Replace with PC LAN IP
+// const uint16_t server_port = 3000;
+// const bool     use_ssl     = false;
 
 // Motor Pin Definitions
 #define IN1 D5
@@ -36,7 +36,7 @@ const bool  use_ssl     = true;
 #define IN3 D7
 #define IN4 D8
 
-SocketIoClient webSocket;
+WebSocketsClient webSocket;
 
 // Motor Control Functions
 void stopMotors() {

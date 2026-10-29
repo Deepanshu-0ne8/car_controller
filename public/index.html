@@ -13,8 +13,18 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Socket.IO v2.4.1 Client CDN (Engine.IO v3 constraint for ESP8266 SocketIoClient) -->
+  <!-- Socket.IO v2.4.1 Client Libraries (Primary + Fallback CDNs) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.4.1/socket.io.min.js"></script>
+  <script>
+    if (typeof io === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/socket.io-client@2.4.1/dist/socket.io.js"><\/script>');
+    }
+  </script>
+  <script>
+    if (typeof io === 'undefined') {
+      document.write('<script src="/socket.io/socket.io.js"><\/script>');
+    }
+  </script>
   
   <style>
     /* Critical UI Constraints: native app feel, zero elastic scroll */
@@ -431,6 +441,14 @@
         settingsDot.classList.add('hidden');
         setConnectionStatus(false, 'CONNECTING...');
 
+        // Ensure Socket.IO library has loaded before connecting
+        if (typeof io === 'undefined') {
+          console.warn('[SOCKET] io library still loading, retrying in 300ms...');
+          setConnectionStatus(false, 'LOADING...');
+          setTimeout(() => connectSocket(customUrl), 300);
+          return;
+        }
+
         try {
           const socketOptions = {
             reconnection: true,
@@ -477,7 +495,8 @@
 
         } catch (e) {
           console.error('[SOCKET] Init failure:', e);
-          setConnectionStatus(false, 'INIT ERROR');
+          setConnectionStatus(false, 'RETRIEVING...');
+          setTimeout(startApp, 1200);
         }
       }
 
@@ -713,8 +732,17 @@
         }
       });
 
-      // Connect on startup
-      connectSocket();
+      // Safe startup: wait until Socket.IO library has fully loaded
+      function startApp() {
+        if (typeof io === 'undefined') {
+          setConnectionStatus(false, 'LOADING...');
+          setTimeout(startApp, 150);
+          return;
+        }
+        connectSocket();
+      }
+
+      startApp();
     })();
   </script>
 </body>
