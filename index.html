@@ -391,13 +391,15 @@
 
       // Determine default backend server URL
       function getResolvedServerUrl() {
+        // If loaded directly on Render (or localhost), auto-connect to self with zero config!
+        const isVercel = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('vercel.dev');
+        if (!isVercel) {
+          return window.location.origin;
+        }
+
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved && saved.trim()) {
           return formatServerUrl(saved);
-        }
-        // If on localhost / 127.0.0.1, connect to port 3000 on localhost
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          return window.location.port === '3000' ? window.location.origin : 'http://localhost:3000';
         }
         return '';
       }
