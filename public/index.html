@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Disable mobile zooming, scaling, double-tap, and pull-to-refresh -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#090d16">
+  <title>ESP8266 RC Car Controller</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Socket.IO client library (CDN primary for Vercel, local fallback) -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  
+  <style>
+    /* Critical UI Constraints: native app feel, zero selection, zero elastic scroll */
+    *, *::before, *::after {
+      -webkit-touch-callout: none !important;
+      -webkit-user-select: none !important;
+      -khtml-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+      -webkit-tap-highlight-color: transparent !important;
+      touch-action: none !important;
+    }
+
+    html, body {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background-color: #090d16;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Ambient cyber grid background */
+    .bg-grid {
+      background-image: 
+        radial-gradient(circle at 50% 30%, rgba(30, 58, 138, 0.22) 0%, transparent 60%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 36px 36px, 36px 36px;
+    }
+
+    /* Tactile Controller Button Styling */
+    .dpad-btn {
+      transition: transform 0.06s ease, filter 0.08s ease, box-shadow 0.08s ease, background-color 0.08s ease;
+      box-shadow: 
+        0 6px 0 #0f172a,
+        0 10px 20px rgba(0, 0, 0, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    }
+
+    .dpad-btn:active, .dpad-btn.active {
+      transform: translateY(4px);
+      box-shadow: 
+        0 2px 0 #0f172a,
+        0 4px 10px rgba(0, 0, 0, 0.4),
+        inset 0 2px 4px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Directional button active glowing colors */
+    .dpad-btn-dir.active, .dpad-btn-dir:active {
+      background: linear-gradient(145deg, #1e3a8a, #2563eb) !important;
+      border-color: #60a5fa !important;
+      filter: drop-shadow(0 0 14px rgba(59, 130, 246, 0.6));
+      color: #ffffff !important;
+    }
+
+    /* Emergency STOP button tactile styling */
+    .stop-btn {
+      background: radial-gradient(circle at 35% 35%, #ef4444, #991b1b 80%);
+      box-shadow: 
+        0 6px 0 #450a0a,
+        0 8px 24px rgba(239, 68, 68, 0.35),
+        inset 0 2px 3px rgba(255, 255, 255, 0.35),
+        inset 0 -3px 4px rgba(0, 0, 0, 0.4);
+      border: 3px solid #f87171;
+    }
+
+    .stop-btn:active, .stop-btn.active {
+      transform: translateY(4px) scale(0.97);
+      background: radial-gradient(circle at 50% 50%, #dc2626, #7f1d1d 90%);
+      box-shadow: 
+        0 2px 0 #450a0a,
+        0 2px 10px rgba(239, 68, 68, 0.6),
+        inset 0 3px 6px rgba(0, 0, 0, 0.6);
+      border-color: #fca5a5;
+    }
+  </style>
+</head>
+<body class="bg-grid flex flex-col justify-between p-3.5 sm:p-5 select-none">
+
+  <!-- TOP BAR: Status, Connection Telemetry & Settings -->
+  <header class="w-full max-w-md mx-auto flex items-center justify-between bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl px-4 py-2.5 shadow-lg">
+    <div class="flex items-center space-x-2.5 cursor-pointer" id="btn-status-header" title="Click to configure backend URL">
+      <div class="relative flex items-center justify-center">
+        <span id="status-pulse" class="absolute w-3 h-3 rounded-full bg-red-500 animate-ping opacity-75"></span>
+        <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+      </div>
+      <div>
+        <h1 class="text-xs font-black tracking-widest text-slate-400 uppercase">ESP8266 LINK</h1>
+        <div id="status-text" class="text-xs font-semibold text-red-400">CONNECTING...</div>
+      </div>
+    </div>
+
+    <!-- Right Controls: Latency, Haptics & Settings Modal Trigger -->
+    <div class="flex items-center space-x-2">
+      <div class="bg-slate-950/70 border border-slate-800/80 rounded-lg px-2.5 py-1 text-right">
+        <span class="text-[9px] text-slate-500 uppercase block font-medium leading-none">LATENCY</span>
+        <span id="ping-text" class="text-xs font-mono font-bold text-slate-300">-- ms</span>
+      </div>
+      
+      <!-- Haptic Toggle Button -->
+      <button id="haptic-toggle" class="p-2 rounded-lg bg-slate-800/80 border border-slate-700/60 text-blue-400 active:scale-95 transition" title="Toggle Vibration Feedback">
+        <svg id="vibrate-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+        </svg>
+      </button>
+
+      <!-- Settings Button (Gear) -->
+      <button id="btn-open-settings" class="p-2 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:text-white active:scale-95 transition" title="Backend Server Settings">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- RENDER COLD-START NOTICE BANNER (Appears when connecting takes >3s) -->
+  <div id="cold-start-banner" class="hidden w-full max-w-md mx-auto mt-2 bg-amber-950/80 border border-amber-800/80 rounded-xl p-2.5 text-xs text-amber-200 flex items-center justify-between shadow-lg">
+    <div class="flex items-center space-x-2">
+      <svg class="w-4 h-4 text-amber-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      <span>Render free tier is waking up (~30-45s)...</span>
+    </div>
+    <button id="btn-banner-settings" class="text-[11px] underline font-semibold text-amber-400 ml-2 shrink-0">Config URL</button>
+  </div>
+
+  <!-- CENTER: HUD & Telemetry Screen -->
+  <main class="w-full max-w-md mx-auto my-auto flex flex-col items-center justify-center space-y-3 sm:space-y-4">
+    
+    <!-- Real-time Drive State Monitor -->
+    <div class="w-full bg-slate-900/60 backdrop-blur-md border border-slate-800/90 rounded-2xl p-3.5 sm:p-4 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+      <!-- Glow ambient backdrop based on action -->
+      <div id="hud-glow" class="absolute inset-0 bg-blue-500/5 transition-colors duration-200 pointer-events-none"></div>
+
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">TRANSMITTING STATE</div>
+      
+      <!-- Big Active Command Indicator -->
+      <div class="flex items-center space-x-2 my-1">
+        <div id="command-badge" class="px-5 py-2 rounded-xl bg-slate-950/80 border border-slate-700/80 font-mono font-black text-xl tracking-wider text-slate-400 flex items-center space-x-2 shadow-md">
+          <span id="cmd-icon">⏹</span>
+          <span id="cmd-text">STOP</span>
+        </div>
+      </div>
+
+      <!-- Speed & Throttle Slider -->
+      <div class="w-full mt-2.5 pt-2.5 border-t border-slate-800/60 flex items-center justify-between text-xs px-1">
+        <span class="text-slate-400 font-medium">THROTTLE: <span id="speed-val" class="text-blue-400 font-bold font-mono">100%</span></span>
+        <div class="flex space-x-1.5">
+          <button class="speed-preset px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-mono" data-speed="50">50%</button>
+          <button class="speed-preset px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-mono" data-speed="75">75%</button>
+          <button class="speed-preset px-2 py-0.5 rounded bg-blue-600/80 text-[11px] text-white font-mono active-preset" data-speed="100">MAX</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- D-PAD CONTROLLER INTERFACE -->
+    <!-- 3x3 Grid:
+         [       ] [ FORWARD ] [       ]
+         [  LEFT ] [  STOP   ] [ RIGHT ]
+         [       ] [BACKWARD ] [       ]
+    -->
+    <div class="relative w-72 h-72 sm:w-80 sm:h-80 grid grid-cols-3 grid-rows-3 gap-2.5 sm:gap-3 p-3 bg-slate-950/70 border border-slate-800/80 rounded-3xl shadow-2xl backdrop-blur-xl">
+
+      <!-- Row 1, Col 1: Empty -->
+      <div></div>
+
+      <!-- Row 1, Col 2: FORWARD -->
+      <button id="btn-forward" data-command="FORWARD" class="dpad-btn dpad-btn-dir bg-slate-800/90 border border-slate-700/70 text-slate-200 rounded-2xl flex flex-col items-center justify-center select-none active:scale-95 group cursor-pointer" aria-label="Forward">
+        <svg class="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-active:-translate-y-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8" d="M5 15l7-7 7 7"></path>
+        </svg>
+        <span class="text-[10px] font-black tracking-widest uppercase mt-0.5 opacity-80">FWD</span>
+      </button>
+
+      <!-- Row 1, Col 3: Empty -->
+      <div></div>
+
+      <!-- Row 2, Col 1: LEFT -->
+      <button id="btn-left" data-command="LEFT" class="dpad-btn dpad-btn-dir bg-slate-800/90 border border-slate-700/70 text-slate-200 rounded-2xl flex flex-col items-center justify-center select-none active:scale-95 group cursor-pointer" aria-label="Turn Left">
+        <svg class="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-active:-translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8" d="M15 19l-7-7 7-7"></path>
+        </svg>
+        <span class="text-[10px] font-black tracking-widest uppercase mt-0.5 opacity-80">LEFT</span>
+      </button>
+
+      <!-- Row 2, Col 2: Central STOP Button (Dead-Man Safe Stop) -->
+      <button id="btn-stop" data-command="STOP" class="dpad-btn stop-btn rounded-2xl flex flex-col items-center justify-center select-none cursor-pointer" aria-label="Emergency Stop">
+        <div class="w-5 h-5 sm:w-6 sm:h-6 rounded bg-white shadow-inner flex items-center justify-center">
+          <div class="w-2.5 h-2.5 bg-red-700 rounded-sm"></div>
+        </div>
+        <span class="text-xs sm:text-sm font-black tracking-wider uppercase text-white mt-1.5 drop-shadow">STOP</span>
+      </button>
+
+      <!-- Row 2, Col 3: RIGHT -->
+      <button id="btn-right" data-command="RIGHT" class="dpad-btn dpad-btn-dir bg-slate-800/90 border border-slate-700/70 text-slate-200 rounded-2xl flex flex-col items-center justify-center select-none active:scale-95 group cursor-pointer" aria-label="Turn Right">
+        <svg class="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-active:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8" d="M9 5l7 7-7 7"></path>
+        </svg>
+        <span class="text-[10px] font-black tracking-widest uppercase mt-0.5 opacity-80">RIGHT</span>
+      </button>
+
+      <!-- Row 3, Col 1: Empty -->
+      <div></div>
+
+      <!-- Row 3, Col 2: BACKWARD -->
+      <button id="btn-backward" data-command="BACKWARD" class="dpad-btn dpad-btn-dir bg-slate-800/90 border border-slate-700/70 text-slate-200 rounded-2xl flex flex-col items-center justify-center select-none active:scale-95 group cursor-pointer" aria-label="Backward">
+        <span class="text-[10px] font-black tracking-widest uppercase mb-0.5 opacity-80">REV</span>
+        <svg class="w-9 h-9 sm:w-10 sm:h-10 transition-transform group-active:translate-y-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8" d="M19 9l-7 7-7-7"></path>
+        </svg>
+      </button>
+
+      <!-- Row 3, Col 3: Empty -->
+      <div></div>
+    </div>
+
+  </main>
+
+  <!-- BOTTOM FOOTER: Keyboard Shortcuts & Controller Hints -->
+  <footer class="w-full max-w-md mx-auto bg-slate-900/60 border border-slate-800/60 rounded-xl px-3.5 py-2 text-center text-slate-400 text-xs">
+    <div class="flex items-center justify-center space-x-2">
+      <span class="inline-block px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">W/▲</span>
+      <span class="inline-block px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">A/◄</span>
+      <span class="inline-block px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">S/▼</span>
+      <span class="inline-block px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">D/►</span>
+      <span class="text-slate-500 font-bold">|</span>
+      <span class="inline-block px-1.5 py-0.5 bg-red-950/80 text-red-300 rounded font-mono text-[10px] border border-red-900/50">SPACE = STOP</span>
+    </div>
+    <div class="text-[10px] text-slate-500 mt-1">Dead-man switch active: release button or key to immediately brake</div>
+  </footer>
+
+  <!-- SETTINGS MODAL: Configure Render Backend URL (Essential for Vercel deployment) -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h2 class="text-sm font-bold text-white flex items-center space-x-2">
+          <span>⚙️ Backend Server Connection</span>
+        </h2>
+        <button id="btn-close-settings" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
+      </div>
+
+      <div class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Render Server URL</label>
+          <input id="input-server-url" type="url" placeholder="https://your-rc-server.onrender.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500 transition" />
+          <p class="text-[11px] text-slate-400 mt-1.5">
+            When deployed on Vercel, paste your live Render Web Service URL here.
+          </p>
+        </div>
+
+        <div class="flex space-x-2">
+          <button id="btn-preset-local" class="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 border border-slate-700">
+            Use Localhost (:3000)
+          </button>
+          <button id="btn-preset-current" class="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 border border-slate-700">
+            Same Origin
+          </button>
+        </div>
+
+        <div class="bg-blue-950/40 border border-blue-800/40 rounded-xl p-3 text-[11px] text-blue-200 space-y-1">
+          <div class="font-bold text-blue-300">💡 Render Free Tier Tip:</div>
+          <div>Render puts free servers to sleep after 15 minutes of inactivity. When you connect, please allow up to 45 seconds for it to wake up.</div>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-2">
+          <button id="btn-save-settings" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg active:scale-98 transition">
+            Save & Connect
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLLER LOGIC SCRIPT -->
+  <script>
+    (function () {
+      // Prevent browser default gestures (pinch zoom, pull down refresh, context menu)
+      document.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+      document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+      document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+
+      // State
+      let socket = null;
+      let isConnected = false;
+      let activeDirection = null;
+      let currentSpeed = 100;
+      let hapticsEnabled = true;
+      let coldStartTimeout = null;
+
+      // Storage Key for backend URL
+      const STORAGE_KEY = 'esp8266_rc_server_url';
+
+      // Elements
+      const statusDot = document.getElementById('status-dot');
+      const statusPulse = document.getElementById('status-pulse');
+      const statusText = document.getElementById('status-text');
+      const pingText = document.getElementById('ping-text');
+      const commandBadge = document.getElementById('command-badge');
+      const cmdIcon = document.getElementById('cmd-icon');
+      const cmdText = document.getElementById('cmd-text');
+      const hudGlow = document.getElementById('hud-glow');
+      const speedVal = document.getElementById('speed-val');
+      const hapticToggle = document.getElementById('haptic-toggle');
+      const coldStartBanner = document.getElementById('cold-start-banner');
+
+      // Settings Modal Elements
+      const settingsModal = document.getElementById('settings-modal');
+      const btnOpenSettings = document.getElementById('btn-open-settings');
+      const btnCloseSettings = document.getElementById('btn-close-settings');
+      const btnSaveSettings = document.getElementById('btn-save-settings');
+      const inputServerUrl = document.getElementById('input-server-url');
+      const btnPresetLocal = document.getElementById('btn-preset-local');
+      const btnPresetCurrent = document.getElementById('btn-preset-current');
+      const btnStatusHeader = document.getElementById('btn-status-header');
+      const btnBannerSettings = document.getElementById('btn-banner-settings');
+
+      const buttons = {
+        FORWARD: document.getElementById('btn-forward'),
+        BACKWARD: document.getElementById('btn-backward'),
+        LEFT: document.getElementById('btn-left'),
+        RIGHT: document.getElementById('btn-right'),
+        STOP: document.getElementById('btn-stop')
+      };
+
+      // Determine default backend server URL
+      function getResolvedServerUrl() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved && saved.trim()) {
+          return saved.trim();
+        }
+        // If on localhost / 127.0.0.1, connect to port 3000 on localhost
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          return window.location.port === '3000' ? window.location.origin : 'http://localhost:3000';
+        }
+        // If running in production (e.g. Vercel), default to empty to prompt user or origin
+        return '';
+      }
+
+      function openSettings() {
+        inputServerUrl.value = localStorage.getItem(STORAGE_KEY) || getResolvedServerUrl();
+        settingsModal.classList.remove('hidden');
+      }
+
+      function closeSettings() {
+        settingsModal.classList.add('hidden');
+      }
+
+      btnOpenSettings.addEventListener('click', openSettings);
+      btnCloseSettings.addEventListener('click', closeSettings);
+      btnStatusHeader.addEventListener('click', openSettings);
+      btnBannerSettings.addEventListener('click', openSettings);
+
+      btnPresetLocal.addEventListener('click', () => {
+        inputServerUrl.value = 'http://localhost:3000';
+      });
+
+      btnPresetCurrent.addEventListener('click', () => {
+        inputServerUrl.value = window.location.origin;
+      });
+
+      btnSaveSettings.addEventListener('click', () => {
+        const newUrl = inputServerUrl.value.trim().replace(/\/+$/, ''); // Remove trailing slashes
+        localStorage.setItem(STORAGE_KEY, newUrl);
+        closeSettings();
+        connectSocket(newUrl);
+      });
+
+      // Vibration feedback helper
+      function triggerHaptic(duration = 20) {
+        if (hapticsEnabled && 'vibrate' in navigator) {
+          try { navigator.vibrate(duration); } catch (e) {}
+        }
+      }
+
+      // Connect or Reconnect Socket.IO
+      function connectSocket(targetUrl) {
+        if (socket) {
+          socket.disconnect();
+          socket = null;
+        }
+
+        const serverUrl = targetUrl !== undefined ? targetUrl : getResolvedServerUrl();
+
+        // If on Vercel and no server URL is set, prompt user
+        if (!serverUrl && window.location.hostname.includes('vercel.app')) {
+          setConnectionStatus(false, 'SET RENDER URL');
+          openSettings();
+          return;
+        }
+
+        setConnectionStatus(false, 'CONNECTING...');
+
+        // Start cold-start reminder timer
+        clearTimeout(coldStartTimeout);
+        coldStartTimeout = setTimeout(() => {
+          if (!isConnected) {
+            coldStartBanner.classList.remove('hidden');
+          }
+        }, 4000);
+
+        try {
+          const socketOptions = {
+            transports: ['websocket', 'polling'], // Fallback for maximum cross-origin compatibility
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1500,
+            timeout: 10000
+          };
+
+          socket = serverUrl ? io(serverUrl, socketOptions) : io(socketOptions);
+
+          socket.on('connect', () => {
+            isConnected = true;
+            clearTimeout(coldStartTimeout);
+            coldStartBanner.classList.add('hidden');
+            setConnectionStatus(true, 'ONLINE');
+            console.log('[SOCKET] Connected to:', serverUrl || 'origin', 'ID:', socket.id);
+          });
+
+          socket.on('disconnect', (reason) => {
+            isConnected = false;
+            setConnectionStatus(false, 'DISCONNECTED');
+            handleRelease('DISCONNECT');
+            console.warn('[SOCKET] Disconnected:', reason);
+          });
+
+          socket.on('connect_error', (err) => {
+            isConnected = false;
+            setConnectionStatus(false, 'WAKING UP / ERR');
+            console.warn('[SOCKET] Connection attempt error:', err.message);
+          });
+
+          // Latency heartbeat
+          socket.on('pong_reply', (start) => {
+            const latency = Math.round(performance.now() - start);
+            pingText.textContent = `${latency} ms`;
+            if (latency < 60) pingText.className = 'text-xs font-mono font-bold text-emerald-400';
+            else if (latency < 160) pingText.className = 'text-xs font-mono font-bold text-amber-400';
+            else pingText.className = 'text-xs font-mono font-bold text-red-400';
+          });
+
+        } catch (e) {
+          console.error('Socket init failure:', e);
+          setConnectionStatus(false, 'INIT ERROR');
+        }
+      }
+
+      // Latency heartbeat interval
+      setInterval(() => {
+        if (isConnected && socket) {
+          const start = performance.now();
+          socket.emit('ping_check', start);
+        }
+      }, 2500);
+
+      function setConnectionStatus(online, text) {
+        if (online) {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+          statusPulse.className = 'absolute w-3 h-3 rounded-full bg-emerald-400 animate-ping opacity-75';
+          statusText.className = 'text-xs font-semibold text-emerald-400';
+          statusText.textContent = text;
+        } else {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500';
+          statusPulse.className = 'absolute w-3 h-3 rounded-full bg-red-500 opacity-20';
+          statusText.className = 'text-xs font-semibold text-red-400';
+          statusText.textContent = text;
+          pingText.textContent = '-- ms';
+        }
+      }
+
+      // Transmit command to Socket.IO backend
+      function emitCommand(command) {
+        const payload = {
+          command: command,
+          speed: currentSpeed,
+          timestamp: Date.now()
+        };
+
+        if (socket && isConnected) {
+          socket.emit('control', payload);
+        }
+
+        updateHUD(command);
+      }
+
+      // Update UI telemetry badges
+      function updateHUD(command) {
+        const styles = {
+          FORWARD: {
+            icon: '▲',
+            text: 'FORWARD',
+            glow: 'rgba(34, 197, 94, 0.25)',
+            badge: 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+          },
+          BACKWARD: {
+            icon: '▼',
+            text: 'BACKWARD',
+            glow: 'rgba(59, 130, 246, 0.25)',
+            badge: 'bg-blue-950/80 border-blue-500 text-blue-300'
+          },
+          LEFT: {
+            icon: '◄',
+            text: 'TURN LEFT',
+            glow: 'rgba(234, 179, 8, 0.25)',
+            badge: 'bg-yellow-950/80 border-yellow-500 text-yellow-300'
+          },
+          RIGHT: {
+            icon: '►',
+            text: 'TURN RIGHT',
+            glow: 'rgba(234, 179, 8, 0.25)',
+            badge: 'bg-yellow-950/80 border-yellow-500 text-yellow-300'
+          },
+          STOP: {
+            icon: '⏹',
+            text: 'STOPPED',
+            glow: 'rgba(239, 68, 68, 0.15)',
+            badge: 'bg-slate-950/80 border-slate-700/80 text-slate-400'
+          }
+        };
+
+        const state = styles[command] || styles.STOP;
+        cmdIcon.textContent = state.icon;
+        cmdText.textContent = state.text;
+        commandBadge.className = `px-5 py-2 rounded-xl border font-mono font-black text-xl tracking-wider flex items-center space-x-2 shadow-md transition-all duration-100 ${state.badge}`;
+        hudGlow.style.backgroundColor = state.glow;
+      }
+
+      // CRITICAL LOGIC: Dead-man switch press handler
+      function handlePress(direction) {
+        if (activeDirection === direction) return;
+
+        activeDirection = direction;
+        triggerHaptic(25);
+
+        // Highlight active button
+        Object.keys(buttons).forEach(dir => {
+          if (dir === direction) {
+            buttons[dir].classList.add('active');
+          } else {
+            buttons[dir].classList.remove('active');
+          }
+        });
+
+        emitCommand(direction);
+      }
+
+      // CRITICAL LOGIC: Immediate brake the millisecond finger lifts or leaves
+      function handleRelease(direction) {
+        if (activeDirection !== null) {
+          activeDirection = null;
+          triggerHaptic(15);
+
+          // Clear active button highlights
+          Object.values(buttons).forEach(btn => btn.classList.remove('active'));
+
+          // Immediately transmit STOP command
+          emitCommand('STOP');
+        }
+      }
+
+      // Bind touch and mouse events to directional buttons
+      ['FORWARD', 'BACKWARD', 'LEFT', 'RIGHT'].forEach(dir => {
+        const btn = buttons[dir];
+        if (!btn) return;
+
+        // Mobile touch events
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          handlePress(dir);
+        }, { passive: false });
+
+        btn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          handleRelease(dir);
+        }, { passive: false });
+
+        btn.addEventListener('touchcancel', (e) => {
+          e.preventDefault();
+          handleRelease(dir);
+        }, { passive: false });
+
+        // Desktop mouse events
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          handlePress(dir);
+        });
+
+        btn.addEventListener('mouseup', (e) => {
+          e.preventDefault();
+          handleRelease(dir);
+        });
+
+        btn.addEventListener('mouseleave', (e) => {
+          e.preventDefault();
+          if (activeDirection === dir) {
+            handleRelease(dir);
+          }
+        });
+      });
+
+      // Dedicated STOP button handler
+      const stopBtn = buttons.STOP;
+      function onEmergencyStop(e) {
+        if (e) e.preventDefault();
+        triggerHaptic(50);
+        stopBtn.classList.add('active');
+        setTimeout(() => stopBtn.classList.remove('active'), 200);
+        activeDirection = null;
+        Object.values(buttons).forEach(b => b.classList.remove('active'));
+        emitCommand('STOP');
+      }
+
+      stopBtn.addEventListener('touchstart', onEmergencyStop, { passive: false });
+      stopBtn.addEventListener('mousedown', onEmergencyStop);
+
+      // Global safety fallbacks
+      window.addEventListener('mouseup', () => {
+        if (activeDirection !== null) handleRelease('WINDOW_MOUSEUP');
+      });
+
+      window.addEventListener('touchend', () => {
+        if (activeDirection !== null) handleRelease('WINDOW_TOUCHEND');
+      });
+
+      window.addEventListener('touchcancel', () => {
+        if (activeDirection !== null) handleRelease('WINDOW_TOUCHCANCEL');
+      });
+
+      window.addEventListener('blur', () => {
+        if (activeDirection !== null) handleRelease('WINDOW_BLUR');
+      });
+
+      // Keyboard Controls (WASD & Arrow Keys)
+      const keyMap = {
+        'KeyW': 'FORWARD',
+        'ArrowUp': 'FORWARD',
+        'KeyS': 'BACKWARD',
+        'ArrowDown': 'BACKWARD',
+        'KeyA': 'LEFT',
+        'ArrowLeft': 'LEFT',
+        'KeyD': 'RIGHT',
+        'ArrowRight': 'RIGHT'
+      };
+
+      window.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+
+        if (e.code === 'Space' || e.code === 'Escape') {
+          e.preventDefault();
+          onEmergencyStop();
+          return;
+        }
+
+        const dir = keyMap[e.code];
+        if (dir) {
+          e.preventDefault();
+          handlePress(dir);
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const dir = keyMap[e.code];
+        if (dir && activeDirection === dir) {
+          e.preventDefault();
+          handleRelease(dir);
+        }
+      });
+
+      // Speed preset controls
+      document.querySelectorAll('.speed-preset').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.speed-preset').forEach(b => {
+            b.classList.remove('bg-blue-600/80', 'text-white', 'active-preset');
+            b.classList.add('bg-slate-800', 'text-slate-300');
+          });
+          btn.classList.remove('bg-slate-800', 'text-slate-300');
+          btn.classList.add('bg-blue-600/80', 'text-white', 'active-preset');
+
+          currentSpeed = parseInt(btn.getAttribute('data-speed'), 10);
+          speedVal.textContent = `${currentSpeed}%`;
+          triggerHaptic(20);
+
+          if (activeDirection) {
+            emitCommand(activeDirection);
+          }
+        });
+      });
+
+      // Haptic toggle
+      hapticToggle.addEventListener('click', () => {
+        hapticsEnabled = !hapticsEnabled;
+        if (hapticsEnabled) {
+          triggerHaptic(30);
+          hapticToggle.classList.remove('opacity-40');
+          hapticToggle.classList.add('text-blue-400');
+        } else {
+          hapticToggle.classList.add('opacity-40');
+          hapticToggle.classList.remove('text-blue-400');
+        }
+      });
+
+      // Auto-connect on startup
+      connectSocket();
+    })();
+  </script>
+</body>
+</html>
