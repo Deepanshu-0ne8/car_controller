@@ -13,13 +13,8 @@
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- Socket.IO client library (CDN with local fallback) -->
-  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-  <script>
-    if (typeof io === 'undefined') {
-      document.write('<script src="/socket.io/socket.io.js"><\/script>');
-    }
-  </script>
+  <!-- Socket.IO v2.4.1 Client CDN (Engine.IO v3 constraint for ESP8266 SocketIoClient) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.4.1/socket.io.min.js"></script>
   
   <style>
     /* Critical UI Constraints: native app feel, zero elastic scroll */
@@ -37,7 +32,7 @@
       touch-action: none !important;
     }
 
-    /* CRITICAL FIX: Ensure inputs, buttons, and modals are 100% interactive */
+    /* Keep settings and input fields fully clickable */
     input, textarea, select, #settings-modal, #settings-modal * {
       -webkit-user-select: text !important;
       user-select: text !important;
@@ -121,13 +116,13 @@
 
   <!-- TOP BAR: Status, Connection Telemetry & Settings -->
   <header class="w-full max-w-md mx-auto flex items-center justify-between bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl px-4 py-2.5 shadow-lg">
-    <div class="flex items-center space-x-2.5 cursor-pointer" id="btn-status-header" title="Click to view connection details">
+    <div class="flex items-center space-x-2.5 cursor-pointer" id="btn-status-header" title="Connection Info">
       <div class="relative flex items-center justify-center">
         <span id="status-pulse" class="absolute w-3 h-3 rounded-full bg-red-500 animate-ping opacity-75"></span>
         <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
       </div>
       <div>
-        <h1 class="text-xs font-black tracking-widest text-slate-400 uppercase">ESP8266 LINK</h1>
+        <h1 class="text-xs font-black tracking-widest text-slate-400 uppercase">ESP8266 LINK (v2.4.1)</h1>
         <div id="status-text" class="text-xs font-semibold text-red-400">CONNECTING...</div>
       </div>
     </div>
@@ -157,18 +152,6 @@
     </div>
   </header>
 
-  <!-- RENDER COLD-START NOTICE BANNER -->
-  <div id="cold-start-banner" class="hidden w-full max-w-md mx-auto mt-2 bg-amber-950/80 border border-amber-800/80 rounded-xl p-2.5 text-xs text-amber-200 flex items-center justify-between shadow-lg">
-    <div class="flex items-center space-x-2">
-      <svg class="w-4 h-4 text-amber-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-      </svg>
-      <span>Render free tier is waking up (~30-45s)...</span>
-    </div>
-    <button id="btn-banner-settings" class="text-[11px] underline font-semibold text-amber-400 ml-2 shrink-0">Server Info</button>
-  </div>
-
   <!-- CENTER: HUD & Telemetry Screen -->
   <main class="w-full max-w-md mx-auto my-auto flex flex-col items-center justify-center space-y-3 sm:space-y-4">
     
@@ -177,7 +160,7 @@
       <!-- Glow ambient backdrop based on action -->
       <div id="hud-glow" class="absolute inset-0 bg-blue-500/5 transition-colors duration-200 pointer-events-none"></div>
 
-      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">TRANSMITTING STATE</div>
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">LIVE TRANSMISSION (EVENT: cmd)</div>
       
       <!-- Big Active Command Indicator -->
       <div class="flex items-center space-x-2 my-1">
@@ -187,14 +170,9 @@
         </div>
       </div>
 
-      <!-- Speed & Throttle Slider -->
-      <div class="w-full mt-2.5 pt-2.5 border-t border-slate-800/60 flex items-center justify-between text-xs px-1">
-        <span class="text-slate-400 font-medium">THROTTLE: <span id="speed-val" class="text-blue-400 font-bold font-mono">100%</span></span>
-        <div class="flex space-x-1.5">
-          <button class="speed-preset px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-mono" data-speed="50">50%</button>
-          <button class="speed-preset px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 font-mono" data-speed="75">75%</button>
-          <button class="speed-preset px-2 py-0.5 rounded bg-blue-600/80 text-[11px] text-white font-mono active-preset" data-speed="100">MAX</button>
-        </div>
+      <div class="w-full mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400 px-1 font-mono">
+        <span>LAST EMITTED: <b id="last-cmd-lbl" class="text-blue-400">cmd: "STOP"</b></span>
+        <span class="text-emerald-400">EIO: v3 OK</span>
       </div>
     </div>
 
@@ -271,15 +249,15 @@
       <span class="text-slate-500 font-bold">|</span>
       <span class="inline-block px-1.5 py-0.5 bg-red-950/80 text-red-300 rounded font-mono text-[10px] border border-red-900/50">SPACE = STOP</span>
     </div>
-    <div class="text-[10px] text-slate-500 mt-1">Dead-man switch active: release button or key to immediately brake</div>
+    <div class="text-[10px] text-slate-500 mt-1">Dead-man switch active: releasing control immediately transmits STOP</div>
   </footer>
 
-  <!-- SETTINGS MODAL: Configure Render Backend URL (Essential for Vercel deployment) -->
+  <!-- SETTINGS MODAL: Configure Render Backend URL if hosted on Vercel -->
   <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl relative">
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
         <h2 class="text-sm font-bold text-white flex items-center space-x-2">
-          <span>⚙️ Connection Status & Settings</span>
+          <span>⚙️ Backend Connection Settings</span>
         </h2>
         <button id="btn-close-settings" class="text-slate-400 hover:text-white p-1 rounded-lg text-lg">✕</button>
       </div>
@@ -287,19 +265,10 @@
       <div class="mt-4 space-y-3.5">
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Backend Server URL</label>
-          <input id="input-server-url" type="text" placeholder="https://your-rc-server.onrender.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500 transition select-text" />
+          <input id="input-server-url" type="text" placeholder="https://your-service.onrender.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500 transition select-text" />
           <p class="text-[11px] text-slate-400 mt-1">
-            When hosting on Render, this automatically connects to your Render domain.
+            If hosted on Render, leave blank or use same origin. If on Vercel, enter your Render URL.
           </p>
-        </div>
-
-        <!-- Live Health Check & Diagnostic Result Box -->
-        <div id="connection-test-result" class="hidden text-xs rounded-xl p-3 border font-mono"></div>
-
-        <div class="flex space-x-2">
-          <button id="btn-test-connection" type="button" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center justify-center space-x-1.5 transition active:scale-95 cursor-pointer">
-            <span>⚡ Test Server Connection</span>
-          </button>
         </div>
 
         <div class="flex space-x-2">
@@ -311,14 +280,9 @@
           </button>
         </div>
 
-        <div class="bg-blue-950/40 border border-blue-800/40 rounded-xl p-3 text-[11px] text-blue-200 space-y-1">
-          <div class="font-bold text-blue-300">💡 Status Check:</div>
-          <div>If running on Render, the first load takes <strong>30–50 seconds</strong> to wake up from free-tier sleep. The ESP8266 does not need to be powered on for this website to turn green.</div>
-        </div>
-
         <div class="flex justify-end space-x-2 pt-1">
           <button id="btn-save-settings" type="button" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg active:scale-98 transition cursor-pointer">
-            Save & Connect Now
+            Save & Connect
           </button>
         </div>
       </div>
@@ -343,11 +307,8 @@
       let socket = null;
       let isConnected = false;
       let activeDirection = null;
-      let currentSpeed = 100;
       let hapticsEnabled = true;
-      let coldStartTimeout = null;
 
-      // Storage Key for backend URL
       const STORAGE_KEY = 'esp8266_rc_server_url';
 
       // Elements
@@ -359,9 +320,8 @@
       const cmdIcon = document.getElementById('cmd-icon');
       const cmdText = document.getElementById('cmd-text');
       const hudGlow = document.getElementById('hud-glow');
-      const speedVal = document.getElementById('speed-val');
+      const lastCmdLbl = document.getElementById('last-cmd-lbl');
       const hapticToggle = document.getElementById('haptic-toggle');
-      const coldStartBanner = document.getElementById('cold-start-banner');
       const settingsDot = document.getElementById('settings-dot');
 
       // Settings Modal Elements
@@ -369,13 +329,10 @@
       const btnOpenSettings = document.getElementById('btn-open-settings');
       const btnCloseSettings = document.getElementById('btn-close-settings');
       const btnSaveSettings = document.getElementById('btn-save-settings');
-      const btnTestConnection = document.getElementById('btn-test-connection');
-      const connectionTestResult = document.getElementById('connection-test-result');
       const inputServerUrl = document.getElementById('input-server-url');
       const btnPresetLocal = document.getElementById('btn-preset-local');
       const btnPresetCurrent = document.getElementById('btn-preset-current');
       const btnStatusHeader = document.getElementById('btn-status-header');
-      const btnBannerSettings = document.getElementById('btn-banner-settings');
 
       const buttons = {
         FORWARD: document.getElementById('btn-forward'),
@@ -385,121 +342,23 @@
         STOP: document.getElementById('btn-stop')
       };
 
-      // Intelligent URL Formatter & Normalizer
+      // Format URL helper
       function formatServerUrl(rawUrl) {
         if (!rawUrl || !rawUrl.trim()) return '';
         let url = rawUrl.trim();
-
-        // If user opened directly from local file system (file:///...)
-        if (url === 'null' || url.startsWith('file:')) {
-          return 'http://localhost:3000';
-        }
-
-        // 1. If protocol is missing, auto-detect protocol
+        if (url === 'null' || url.startsWith('file:')) return 'http://localhost:3000';
         if (!/^https?:\/\//i.test(url)) {
-          const isHttps = window.location.protocol === 'https:';
-          url = (isHttps ? 'https://' : 'http://') + url;
+          url = (window.location.protocol === 'https:' ? 'https://' : 'http://') + url;
         }
-
-        // 2. Prevent Mixed Content Blocking: If frontend is on HTTPS (e.g. Vercel), remote servers must be HTTPS
-        if (window.location.protocol === 'https:' && url.startsWith('http://')) {
-          if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
-            url = url.replace(/^http:\/\//i, 'https://');
-          }
+        if (window.location.protocol === 'https:' && url.startsWith('http://') && !url.includes('localhost')) {
+          url = url.replace(/^http:\/\//i, 'https://');
         }
-
-        // 3. Strip trailing slashes and common endpoints if user pasted them
-        url = url.replace(/\/+$/, '');
-        url = url.replace(/\/(health|api\/status|socket\.io).*$/i, '');
-
+        url = url.replace(/\/+$/, '').replace(/\/(health|api\/status|socket\.io).*$/i, '');
         return url;
       }
 
-      // Determine default backend server URL
-      function getResolvedServerUrl() {
-        // If opened as a local file (double-clicked in Finder/Explorer)
-        if (window.location.protocol === 'file:') {
-          return 'http://localhost:3000';
-        }
-
-        // If loaded directly on Render (or localhost:3000), auto-connect to same origin!
-        const isVercel = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('vercel.dev');
-        if (!isVercel && window.location.origin && window.location.origin !== 'null') {
-          return window.location.origin;
-        }
-
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved && saved.trim()) {
-          return formatServerUrl(saved);
-        }
-        return '';
-      }
-
-      function showTestResult(type, message) {
-        connectionTestResult.classList.remove('hidden', 'bg-emerald-950/70', 'border-emerald-800', 'text-emerald-300', 'bg-red-950/70', 'border-red-800', 'text-red-300', 'bg-amber-950/70', 'border-amber-800', 'text-amber-300', 'bg-slate-950', 'border-slate-800', 'text-slate-300');
-        
-        if (type === 'success') {
-          connectionTestResult.classList.add('bg-emerald-950/70', 'border-emerald-800', 'text-emerald-300');
-        } else if (type === 'error') {
-          connectionTestResult.classList.add('bg-red-950/70', 'border-red-800', 'text-red-300');
-        } else if (type === 'warning') {
-          connectionTestResult.classList.add('bg-amber-950/70', 'border-amber-800', 'text-amber-300');
-        } else {
-          connectionTestResult.classList.add('bg-slate-950', 'border-slate-800', 'text-slate-300');
-        }
-        connectionTestResult.innerHTML = message;
-      }
-
-      // Test connection using HTTP health endpoint (also wakes Render up!)
-      async function testServerConnection() {
-        const cleanUrl = formatServerUrl(inputServerUrl.value);
-        if (!cleanUrl) {
-          showTestResult('error', '⚠️ Please enter your server URL first.');
-          return;
-        }
-
-        inputServerUrl.value = cleanUrl;
-        btnTestConnection.disabled = true;
-        btnTestConnection.classList.add('opacity-50');
-        showTestResult('pending', `<div class="flex items-center space-x-2"><svg class="w-4 h-4 animate-spin text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg><span>Pinging ${cleanUrl}/health...</span></div>`);
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 40000); // 40s for cold start
-
-          const startTime = performance.now();
-          const response = await fetch(`${cleanUrl}/health`, {
-            method: 'GET',
-            mode: 'cors',
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-
-          const latency = Math.round(performance.now() - startTime);
-
-          if (response.ok) {
-            const data = await response.json().catch(() => ({}));
-            showTestResult('success', `✅ <b>Server Online!</b> HTTP 200 OK<br>Latency: ${latency}ms | Uptime: ${data.uptime || 0}s<br>Socket.IO connection ready!`);
-            localStorage.setItem(STORAGE_KEY, cleanUrl);
-            connectSocket(cleanUrl);
-          } else {
-            showTestResult('error', `❌ Server responded with HTTP ${response.status}: ${response.statusText}`);
-          }
-        } catch (err) {
-          if (err.name === 'AbortError') {
-            showTestResult('warning', `⏳ Server wake-up is taking longer than 40s.<br>Render free tier may still be building or booting. Please retry in 15 seconds.`);
-          } else {
-            showTestResult('error', `❌ <b>Connection failed:</b> ${err.message}<br>Check if server is running and URL is correct.`);
-          }
-        } finally {
-          btnTestConnection.disabled = false;
-          btnTestConnection.classList.remove('opacity-50');
-        }
-      }
-
       function openSettings() {
-        inputServerUrl.value = localStorage.getItem(STORAGE_KEY) || getResolvedServerUrl();
-        connectionTestResult.classList.add('hidden');
+        inputServerUrl.value = localStorage.getItem(STORAGE_KEY) || (window.location.origin !== 'null' ? window.location.origin : '');
         settingsModal.classList.remove('hidden');
       }
 
@@ -510,8 +369,6 @@
       btnOpenSettings.addEventListener('click', openSettings);
       btnCloseSettings.addEventListener('click', closeSettings);
       btnStatusHeader.addEventListener('click', openSettings);
-      btnBannerSettings.addEventListener('click', openSettings);
-      btnTestConnection.addEventListener('click', testServerConnection);
 
       btnPresetLocal.addEventListener('click', () => {
         inputServerUrl.value = 'http://localhost:3000';
@@ -525,86 +382,91 @@
         const cleanUrl = formatServerUrl(inputServerUrl.value);
         if (cleanUrl) {
           localStorage.setItem(STORAGE_KEY, cleanUrl);
-          inputServerUrl.value = cleanUrl;
-          closeSettings();
-          connectSocket(cleanUrl);
         } else {
-          showTestResult('error', '⚠️ Please enter a valid URL.');
+          localStorage.removeItem(STORAGE_KEY);
         }
+        closeSettings();
+        connectSocket(cleanUrl);
       });
 
-      // Vibration feedback helper
       function triggerHaptic(duration = 20) {
         if (hapticsEnabled && 'vibrate' in navigator) {
           try { navigator.vibrate(duration); } catch (e) {}
         }
       }
 
-      // Connect or Reconnect Socket.IO with fallback resilience
-      function connectSocket(targetUrl) {
+      // Connect using Socket.IO v2.4.1 Client
+      function connectSocket(customUrl) {
         if (socket) {
           try {
             socket.disconnect();
-            socket.close();
           } catch(e) {}
           socket = null;
         }
 
-        const rawUrl = targetUrl !== undefined ? targetUrl : getResolvedServerUrl();
-        const serverUrl = formatServerUrl(rawUrl);
+        const isVercel = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('vercel.dev');
+        const isFile = window.location.protocol === 'file:';
 
-        if (!serverUrl && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('vercel.dev'))) {
-          setConnectionStatus(false, 'CLICK ⚙️ TO SET URL');
-          settingsDot.classList.remove('hidden');
-          openSettings();
-          return;
+        let target = undefined;
+
+        if (customUrl) {
+          target = formatServerUrl(customUrl);
+        } else if (isFile) {
+          target = 'http://localhost:3000';
+        } else if (isVercel) {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            target = formatServerUrl(saved);
+          } else {
+            setConnectionStatus(false, 'CLICK ⚙️ TO SET URL');
+            settingsDot.classList.remove('hidden');
+            openSettings();
+            return;
+          }
+        } else {
+          // On Render or local Node server: same origin
+          target = undefined;
         }
 
         settingsDot.classList.add('hidden');
         setConnectionStatus(false, 'CONNECTING...');
 
-        clearTimeout(coldStartTimeout);
-        coldStartTimeout = setTimeout(() => {
-          if (!isConnected) {
-            coldStartBanner.classList.remove('hidden');
-            setConnectionStatus(false, 'WAKING UP SERVER...');
-          }
-        }, 3500);
-
         try {
           const socketOptions = {
-            transports: ['polling', 'websocket'],
             reconnection: true,
             reconnectionAttempts: Infinity,
-            reconnectionDelay: 2000,
-            reconnectionDelayMax: 5000,
-            timeout: 45000
+            reconnectionDelay: 1500,
+            timeout: 20000
           };
 
-          socket = serverUrl ? io(serverUrl, socketOptions) : io(socketOptions);
+          // Socket.IO v2.4.1 initialization
+          socket = target ? io(target, socketOptions) : io(socketOptions);
 
           socket.on('connect', () => {
             isConnected = true;
-            clearTimeout(coldStartTimeout);
-            coldStartBanner.classList.add('hidden');
             setConnectionStatus(true, 'ONLINE');
-            console.log('[SOCKET] ✅ Connected to:', serverUrl || 'origin', 'ID:', socket.id);
+            console.log('[SOCKET.IO v2.4.1] ✅ Connected! ID:', socket.id);
           });
 
           socket.on('disconnect', (reason) => {
             isConnected = false;
             setConnectionStatus(false, 'DISCONNECTED');
             handleRelease('DISCONNECT');
-            console.warn('[SOCKET] Disconnected:', reason);
+            console.warn('[SOCKET.IO v2.4.1] Disconnected:', reason);
           });
 
           socket.on('connect_error', (err) => {
             isConnected = false;
-            console.warn('[SOCKET] Connect error:', err.message);
             setConnectionStatus(false, 'CONNECTING...');
+            console.warn('[SOCKET.IO v2.4.1] Connect error:', err);
           });
 
-          // Latency heartbeat
+          // Server ACK
+          socket.on('cmd_ack', (ackCmd) => {
+            lastCmdLbl.textContent = `cmd: "${ackCmd}" (ACK)`;
+          });
+
+          // Latency ping-pong
           socket.on('pong_reply', (start) => {
             const latency = Math.round(performance.now() - start);
             pingText.textContent = `${latency} ms`;
@@ -642,22 +504,20 @@
         }
       }
 
-      // Transmit command to Socket.IO backend
+      // CRITICAL REQUIREMENT: Emit strictly under event name 'cmd' with movement string
       function emitCommand(command) {
-        const payload = {
-          command: command,
-          speed: currentSpeed,
-          timestamp: Date.now()
-        };
-
         if (socket && isConnected) {
-          socket.emit('control', payload);
+          socket.emit('cmd', command);
+          console.log('[EMIT] -> cmd:', command);
+        } else {
+          console.log('[OFFLINE EMIT] -> cmd:', command);
         }
 
+        lastCmdLbl.textContent = `cmd: "${command}"`;
         updateHUD(command);
       }
 
-      // Update UI telemetry badges
+      // Update UI visual HUD
       function updateHUD(command) {
         const styles = {
           FORWARD: {
@@ -715,6 +575,7 @@
           }
         });
 
+        // Emits 'cmd' with direction string
         emitCommand(direction);
       }
 
@@ -727,7 +588,7 @@
           // Clear active button highlights
           Object.values(buttons).forEach(btn => btn.classList.remove('active'));
 
-          // Immediately transmit STOP command
+          // Immediately transmit 'cmd' -> 'STOP'
           emitCommand('STOP');
         }
       }
@@ -737,7 +598,7 @@
         const btn = buttons[dir];
         if (!btn) return;
 
-        // Mobile touch events
+        // Mobile touch events: touchstart emits direction, touchend/touchcancel emits STOP
         btn.addEventListener('touchstart', (e) => {
           e.preventDefault();
           handlePress(dir);
@@ -753,7 +614,7 @@
           handleRelease(dir);
         }, { passive: false });
 
-        // Desktop mouse events
+        // Desktop mouse events: mousedown emits direction, mouseup/mouseleave emits STOP
         btn.addEventListener('mousedown', (e) => {
           e.preventDefault();
           handlePress(dir);
@@ -839,26 +700,6 @@
         }
       });
 
-      // Speed preset controls
-      document.querySelectorAll('.speed-preset').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          document.querySelectorAll('.speed-preset').forEach(b => {
-            b.classList.remove('bg-blue-600/80', 'text-white', 'active-preset');
-            b.classList.add('bg-slate-800', 'text-slate-300');
-          });
-          btn.classList.remove('bg-slate-800', 'text-slate-300');
-          btn.classList.add('bg-blue-600/80', 'text-white', 'active-preset');
-
-          currentSpeed = parseInt(btn.getAttribute('data-speed'), 10);
-          speedVal.textContent = `${currentSpeed}%`;
-          triggerHaptic(20);
-
-          if (activeDirection) {
-            emitCommand(activeDirection);
-          }
-        });
-      });
-
       // Haptic toggle
       hapticToggle.addEventListener('click', () => {
         hapticsEnabled = !hapticsEnabled;
@@ -872,7 +713,7 @@
         }
       });
 
-      // Auto-connect on startup
+      // Connect on startup
       connectSocket();
     })();
   </script>

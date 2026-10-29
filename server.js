@@ -1,60 +1,59 @@
 const express = require('express');
 const http = require('http');
-const { Server } = require('socket.io');
-const os = require('os');
+const socketIo = require('socket.io');
 const path = require('path');
+const os = require('os');
 
 const app = express();
 const server = http.createServer(app);
 
-// Configuration from environment variables
 const PORT = process.env.PORT || 3000;
-const rawOrigins = process.env.CORS_ORIGIN || '*';
-const allowedOrigins = rawOrigins === '*' ? '*' : rawOrigins.split(',').map(s => s.trim());
 
-// Express CORS headers for API endpoints (dynamic reflection for Vercel & local)
+// Express CORS headers for API endpoints
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '*';
-  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
   next();
 });
 
-// Serve static frontend files if hosted directly
+// Serve frontend static files
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
-// Socket.IO configuration with full cross-origin and transport fallback
-const io = new Server(server, {
-  cors: {
-    origin: (origin, callback) => {
-      // Allow all origins (dynamically reflect for Vercel, localhost, and mobile apps)
-      callback(null, true);
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    credentials: true
-  },
-  transports: ['polling', 'websocket'] // Start with polling (wakes Render free tier), then upgrade to WebSocket
+// Initialize Socket.IO v2.4.1 (Engine.IO v3 for ESP8266 SocketIoClient support)
+const io = socketIo(server, {
+  origins: '*:*',
+  serveClient: true,
+  pingTimeout: 30000,
+  pingInterval: 25000
 });
+
+// Safe origin reflection for Socket.IO v2
+if (typeof io.origins === 'function') {
+  io.origins((origin, callback) => {
+    callback(null, true);
+  });
+}
 
 // Runtime telemetry state
 let currentState = {
   lastCommand: 'STOP',
   speed: 100,
-  activeControllers: 0,
+  activeClients: 0,
   lastUpdated: Date.now()
 };
 
-// Healthcheck endpoints for Render uptime monitoring & keep-alive pings
+// Healthcheck endpoints for Render / Vercel uptime checks
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'esp8266-rc-server',
+    socketio_version: '2.4.1',
+    engineio_version: 'v3 (ESP8266 Compatible)',
     uptime: Math.round(process.uptime()),
     timestamp: new Date().toISOString()
   });
@@ -64,42 +63,37 @@ app.get('/api/status', (req, res) => {
   res.status(200).json({
     status: 'online',
     state: currentState,
-    connectedSockets: io.engine.clientsCount,
+    connectedSockets: Object.keys(io.sockets.sockets || {}).length,
     uptime: Math.round(process.uptime())
   });
 });
 
-// Fallback route to serve index.html for direct access
+// Fallback to index.html
 app.get('*', (req, res) => {
-  const indexPath = path.join(__dirname, 'index.html');
-  res.sendFile(indexPath);
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Formatted console logger
 function logWithTimestamp(message) {
   const now = new Date().toLocaleTimeString('en-US', { hour12: false });
   console.log(`[${now}] ${message}`);
 }
 
-// Socket.IO Connection Handler
+// Socket.IO v2 Connection Handler
 io.on('connection', (socket) => {
-  currentState.activeControllers++;
-  const clientIp = socket.handshake.headers['x-forwarded-for'] || socket.handshake.address;
-  logWithTimestamp(`🔌 Client connected: ${socket.id} (${clientIp}) | Active: ${currentState.activeControllers}`);
+  currentState.activeClients++;
+  logWithTimestamp(`🔌 Connected: ${socket.id} | Active Clients: ${currentState.activeClients}`);
 
-  // Transmit initial state
+  // Send initial state
   socket.emit('state_update', currentState);
 
-  // Listen for drive commands
-  socket.on('control', (data) => {
+  // PRIMARY EVENT: Listen for 'cmd' from frontend controller
+  socket.on('cmd', (data) => {
     let command = 'STOP';
-    let speed = 100;
 
     if (typeof data === 'string') {
-      command = data.toUpperCase();
+      command = data.toUpperCase().trim();
     } else if (data && typeof data === 'object') {
-      command = (data.command || 'STOP').toUpperCase();
-      speed = Number.isInteger(data.speed) ? data.speed : 100;
+      command = (data.command || data.cmd || 'STOP').toUpperCase().trim();
     }
 
     const validCommands = ['FORWARD', 'BACKWARD', 'LEFT', 'RIGHT', 'STOP'];
@@ -108,7 +102,6 @@ io.on('connection', (socket) => {
     }
 
     currentState.lastCommand = command;
-    currentState.speed = speed;
     currentState.lastUpdated = Date.now();
 
     const emojiMap = {
@@ -118,49 +111,54 @@ io.on('connection', (socket) => {
       RIGHT: '➡️  RIGHT',
       STOP: '⏹️  STOP'
     };
-    logWithTimestamp(`🎮 [CMD] ${emojiMap[command] || command} (Speed: ${speed}%) from ${socket.id}`);
+    logWithTimestamp(`🎮 [cmd] ${emojiMap[command] || command} from ${socket.id}`);
 
-    // Broadcast to ESP8266 client
-    socket.broadcast.emit('car_command', {
-      command,
-      speed,
-      timestamp: Date.now(),
-      sender: socket.id
-    });
-
-    // Shorthand string event for lightweight Arduino WebSocket parsers
+    // Broadcast string command to all other clients (ESP8266 listening on 'cmd')
     socket.broadcast.emit('cmd', command);
 
-    // Confirmation ACK
-    socket.emit('command_ack', { command, speed, timestamp: Date.now() });
+    // Also send structured event if needed
+    socket.broadcast.emit('car_command', command);
 
-    // Sync all connected monitoring dashboards
+    // Confirmation ACK back to sender
+    socket.emit('cmd_ack', command);
+
+    // Update telemetry state
     io.emit('state_update', currentState);
   });
 
-  // Latency heartbeat
+  // Alias support for 'control' event
+  socket.on('control', (data) => {
+    let command = 'STOP';
+    if (typeof data === 'string') {
+      command = data.toUpperCase();
+    } else if (data && typeof data === 'object') {
+      command = (data.command || data.cmd || 'STOP').toUpperCase();
+    }
+    socket.broadcast.emit('cmd', command);
+  });
+
+  // Latency ping-pong
   socket.on('ping_check', (clientTimestamp) => {
     socket.emit('pong_reply', clientTimestamp);
   });
 
-  // Client disconnect
+  // Disconnect handler
   socket.on('disconnect', (reason) => {
-    currentState.activeControllers = Math.max(0, currentState.activeControllers - 1);
-    logWithTimestamp(`❌ Client disconnected: ${socket.id} (${reason}) | Remaining: ${currentState.activeControllers}`);
+    currentState.activeClients = Math.max(0, currentState.activeClients - 1);
+    logWithTimestamp(`❌ Disconnected: ${socket.id} (${reason}) | Remaining: ${currentState.activeClients}`);
 
-    // Dead-man safety net: If all controllers close/disconnect, immediately halt car
-    if (currentState.activeControllers === 0 && currentState.lastCommand !== 'STOP') {
+    // Auto-stop safety if no clients are connected
+    if (currentState.activeClients === 0 && currentState.lastCommand !== 'STOP') {
       currentState.lastCommand = 'STOP';
       currentState.lastUpdated = Date.now();
-      logWithTimestamp(`🚨 SAFETY AUTO-STOP: No controllers active, stopping motors.`);
-      io.emit('car_command', { command: 'STOP', speed: 0, reason: 'safety_disconnect' });
+      logWithTimestamp(`🚨 SAFETY AUTO-STOP: No controllers connected, halting motors.`);
       io.emit('cmd', 'STOP');
       io.emit('state_update', currentState);
     }
   });
 });
 
-// Detect LAN IPs for local testing
+// LAN IP helper for local testing
 function getLocalIpAddresses() {
   const interfaces = os.networkInterfaces();
   const addresses = [];
@@ -174,29 +172,17 @@ function getLocalIpAddresses() {
   return addresses;
 }
 
-// Graceful shutdown handling for Render containers
-process.on('SIGTERM', () => {
-  logWithTimestamp('🛑 SIGTERM received. Shutting down gracefully...');
-  io.emit('car_command', { command: 'STOP', speed: 0, reason: 'server_shutdown' });
-  io.emit('cmd', 'STOP');
-  server.close(() => {
-    logWithTimestamp('Server closed.');
-    process.exit(0);
-  });
-});
-
 server.listen(PORT, '0.0.0.0', () => {
   const localIps = getLocalIpAddresses();
   console.log(`\n======================================================`);
-  console.log(`🚀 ESP8266 RC Car Controller Server Running!`);
+  console.log(`🚀 ESP8266 RC Controller Server (Socket.IO v2.4.1 / EIO v3)`);
   console.log(`======================================================`);
-  console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`  Port:        ${PORT}`);
-  console.log(`  CORS Origin: ${rawOrigins}`);
   console.log(`  Local URL:   http://localhost:${PORT}`);
   if (localIps.length > 0) {
-    console.log(`  LAN URL:     http://${localIps[0]}:${PORT} (Phone on same Wi-Fi)`);
+    console.log(`  LAN URL:     http://${localIps[0]}:${PORT} (Phone Wi-Fi)`);
   }
   console.log(`  Healthcheck: http://localhost:${PORT}/health`);
+  console.log(`  ESP8266 Lib: SocketIoClient (Compatible with EIO v3)`);
   console.log(`======================================================\n`);
 });

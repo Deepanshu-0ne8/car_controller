@@ -4,26 +4,13 @@
   "description": "Real-time web remote control application for ESP8266 RC car",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16.0.0"
   },
-  "keywords": [
-    "esp8266",
-    "rc-car",
-    "socket.io",
-    "controller",
-    "websocket",
-    "render",
-    "vercel"
-  ],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "express": "^4.21.2",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "socket.io": "2.4.1"
   }
 }
