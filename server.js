@@ -12,11 +12,13 @@ const PORT = process.env.PORT || 3000;
 const rawOrigins = process.env.CORS_ORIGIN || '*';
 const allowedOrigins = rawOrigins === '*' ? '*' : rawOrigins.split(',').map(s => s.trim());
 
-// Express CORS headers for API endpoints
+// Express CORS headers for API endpoints (dynamic reflection for Vercel & local)
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -30,11 +32,14 @@ app.use(express.static(__dirname));
 // Socket.IO configuration with full cross-origin and transport fallback
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ['GET', 'POST'],
-    credentials: false
+    origin: (origin, callback) => {
+      // Allow all origins (dynamically reflect for Vercel, localhost, and mobile apps)
+      callback(null, true);
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true
   },
-  transports: ['websocket', 'polling'] // Support both WebSockets and HTTP Long-Polling
+  transports: ['polling', 'websocket'] // Start with polling (wakes Render free tier), then upgrade to WebSocket
 });
 
 // Runtime telemetry state

@@ -132,16 +132,17 @@
       </button>
 
       <!-- Settings Button (Gear) -->
-      <button id="btn-open-settings" class="p-2 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:text-white active:scale-95 transition" title="Backend Server Settings">
+      <button id="btn-open-settings" class="p-2 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:text-white active:scale-95 transition relative" title="Backend Server Settings">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
         </svg>
+        <span id="settings-dot" class="hidden absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400"></span>
       </button>
     </div>
   </header>
 
-  <!-- RENDER COLD-START NOTICE BANNER (Appears when connecting takes >3s) -->
+  <!-- RENDER COLD-START NOTICE BANNER -->
   <div id="cold-start-banner" class="hidden w-full max-w-md mx-auto mt-2 bg-amber-950/80 border border-amber-800/80 rounded-xl p-2.5 text-xs text-amber-200 flex items-center justify-between shadow-lg">
     <div class="flex items-center space-x-2">
       <svg class="w-4 h-4 text-amber-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
@@ -259,7 +260,7 @@
   </footer>
 
   <!-- SETTINGS MODAL: Configure Render Backend URL (Essential for Vercel deployment) -->
-  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl relative">
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
         <h2 class="text-sm font-bold text-white flex items-center space-x-2">
@@ -268,32 +269,41 @@
         <button id="btn-close-settings" class="text-slate-400 hover:text-white p-1 rounded-lg">✕</button>
       </div>
 
-      <div class="mt-4 space-y-4">
+      <div class="mt-4 space-y-3.5">
         <div>
           <label class="block text-xs font-semibold text-slate-300 mb-1">Render Server URL</label>
-          <input id="input-server-url" type="url" placeholder="https://your-rc-server.onrender.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500 transition" />
-          <p class="text-[11px] text-slate-400 mt-1.5">
-            When deployed on Vercel, paste your live Render Web Service URL here.
+          <input id="input-server-url" type="text" placeholder="https://your-rc-server.onrender.com" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-blue-500 transition" />
+          <p class="text-[11px] text-slate-400 mt-1">
+            Example: <code class="text-blue-400">https://your-service.onrender.com</code>
           </p>
         </div>
 
+        <!-- Live Health Check & Diagnostic Result Box -->
+        <div id="connection-test-result" class="hidden text-xs rounded-xl p-3 border font-mono"></div>
+
         <div class="flex space-x-2">
-          <button id="btn-preset-local" class="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 border border-slate-700">
+          <button id="btn-test-connection" type="button" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center justify-center space-x-1.5 transition active:scale-95">
+            <span>⚡ Test & Wake Up Server</span>
+          </button>
+        </div>
+
+        <div class="flex space-x-2">
+          <button id="btn-preset-local" type="button" class="flex-1 py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 border border-slate-800">
             Use Localhost (:3000)
           </button>
-          <button id="btn-preset-current" class="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 border border-slate-700">
+          <button id="btn-preset-current" type="button" class="flex-1 py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-semibold text-slate-400 hover:text-slate-200 border border-slate-800">
             Same Origin
           </button>
         </div>
 
         <div class="bg-blue-950/40 border border-blue-800/40 rounded-xl p-3 text-[11px] text-blue-200 space-y-1">
-          <div class="font-bold text-blue-300">💡 Render Free Tier Tip:</div>
-          <div>Render puts free servers to sleep after 15 minutes of inactivity. When you connect, please allow up to 45 seconds for it to wake up.</div>
+          <div class="font-bold text-blue-300">💡 Render Free Tier Notice:</div>
+          <div>Render free web services spin down after 15 minutes of inactivity. The first wake-up takes <strong>30–50 seconds</strong>. Click "Test & Wake Up Server" above to trigger a wake-up ping.</div>
         </div>
 
-        <div class="flex justify-end space-x-2 pt-2">
-          <button id="btn-save-settings" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg active:scale-98 transition">
-            Save & Connect
+        <div class="flex justify-end space-x-2 pt-1">
+          <button id="btn-save-settings" type="button" class="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-lg active:scale-98 transition">
+            Save & Connect Now
           </button>
         </div>
       </div>
@@ -331,12 +341,15 @@
       const speedVal = document.getElementById('speed-val');
       const hapticToggle = document.getElementById('haptic-toggle');
       const coldStartBanner = document.getElementById('cold-start-banner');
+      const settingsDot = document.getElementById('settings-dot');
 
       // Settings Modal Elements
       const settingsModal = document.getElementById('settings-modal');
       const btnOpenSettings = document.getElementById('btn-open-settings');
       const btnCloseSettings = document.getElementById('btn-close-settings');
       const btnSaveSettings = document.getElementById('btn-save-settings');
+      const btnTestConnection = document.getElementById('btn-test-connection');
+      const connectionTestResult = document.getElementById('connection-test-result');
       const inputServerUrl = document.getElementById('input-server-url');
       const btnPresetLocal = document.getElementById('btn-preset-local');
       const btnPresetCurrent = document.getElementById('btn-preset-current');
@@ -351,22 +364,114 @@
         STOP: document.getElementById('btn-stop')
       };
 
+      // Intelligent URL Formatter & Normalizer
+      function formatServerUrl(rawUrl) {
+        if (!rawUrl || !rawUrl.trim()) return '';
+        let url = rawUrl.trim();
+
+        // 1. If protocol is missing, auto-detect protocol
+        if (!/^https?:\/\//i.test(url)) {
+          const isHttps = window.location.protocol === 'https:';
+          url = (isHttps ? 'https://' : 'http://') + url;
+        }
+
+        // 2. Prevent Mixed Content Blocking: If frontend is on HTTPS (e.g. Vercel), remote servers must be HTTPS
+        if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+          if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+            url = url.replace(/^http:\/\//i, 'https://');
+          }
+        }
+
+        // 3. Strip trailing slashes and common endpoints if user pasted them
+        url = url.replace(/\/+$/, '');
+        url = url.replace(/\/(health|api\/status|socket\.io).*$/i, '');
+
+        return url;
+      }
+
       // Determine default backend server URL
       function getResolvedServerUrl() {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved && saved.trim()) {
-          return saved.trim();
+          return formatServerUrl(saved);
         }
         // If on localhost / 127.0.0.1, connect to port 3000 on localhost
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
           return window.location.port === '3000' ? window.location.origin : 'http://localhost:3000';
         }
-        // If running in production (e.g. Vercel), default to empty to prompt user or origin
         return '';
+      }
+
+      function showTestResult(type, message) {
+        connectionTestResult.classList.remove('hidden', 'bg-emerald-950/70', 'border-emerald-800', 'text-emerald-300', 'bg-red-950/70', 'border-red-800', 'text-red-300', 'bg-amber-950/70', 'border-amber-800', 'text-amber-300', 'bg-slate-950', 'border-slate-800', 'text-slate-300');
+        
+        if (type === 'success') {
+          connectionTestResult.classList.add('bg-emerald-950/70', 'border-emerald-800', 'text-emerald-300');
+        } else if (type === 'error') {
+          connectionTestResult.classList.add('bg-red-950/70', 'border-red-800', 'text-red-300');
+        } else if (type === 'warning') {
+          connectionTestResult.classList.add('bg-amber-950/70', 'border-amber-800', 'text-amber-300');
+        } else {
+          connectionTestResult.classList.add('bg-slate-950', 'border-slate-800', 'text-slate-300');
+        }
+        connectionTestResult.innerHTML = message;
+      }
+
+      // Test connection using HTTP health endpoint (also wakes Render up!)
+      async function testServerConnection() {
+        const cleanUrl = formatServerUrl(inputServerUrl.value);
+        if (!cleanUrl) {
+          showTestResult('error', '⚠️ Please enter your Render server URL first.');
+          return;
+        }
+
+        inputServerUrl.value = cleanUrl;
+        btnTestConnection.disabled = true;
+        btnTestConnection.classList.add('opacity-50');
+        showTestResult('pending', `<div class="flex items-center space-x-2"><svg class="w-4 h-4 animate-spin text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg><span>Pinging ${cleanUrl}/health (waking Render server up)...</span></div>`);
+
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 40000); // 40s for cold start
+
+          const startTime = performance.now();
+          const response = await fetch(`${cleanUrl}/health`, {
+            method: 'GET',
+            mode: 'cors',
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          const latency = Math.round(performance.now() - startTime);
+
+          if (response.ok) {
+            const data = await response.json().catch(() => ({}));
+            showTestResult('success', `✅ <b>Server Online!</b> HTTP 200 OK<br>Latency: ${latency}ms | Uptime: ${data.uptime || 0}s<br>Socket.IO connection ready!`);
+            // Automatically save and connect
+            localStorage.setItem(STORAGE_KEY, cleanUrl);
+            connectSocket(cleanUrl);
+          } else {
+            showTestResult('error', `❌ Server responded with HTTP ${response.status}: ${response.statusText}<br>Make sure the Render service is deployed.`);
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') {
+            showTestResult('warning', `⏳ Server wake-up is taking longer than 40s.<br>Render free tier may still be building or booting. Please retry in 15 seconds.`);
+          } else {
+            let extra = '';
+            if (window.location.protocol === 'https:' && cleanUrl.startsWith('http://')) {
+              extra = '<br><b>Mixed Content Error:</b> Your browser blocked insecure HTTP because this page is on HTTPS. Use <code>https://</code>.';
+            }
+            showTestResult('error', `❌ <b>Connection failed:</b> ${err.message}${extra}<br>Check if URL is correct and Render service status is "Live".`);
+          }
+        } finally {
+          btnTestConnection.disabled = false;
+          btnTestConnection.classList.remove('opacity-50');
+        }
       }
 
       function openSettings() {
         inputServerUrl.value = localStorage.getItem(STORAGE_KEY) || getResolvedServerUrl();
+        connectionTestResult.classList.add('hidden');
         settingsModal.classList.remove('hidden');
       }
 
@@ -378,6 +483,7 @@
       btnCloseSettings.addEventListener('click', closeSettings);
       btnStatusHeader.addEventListener('click', openSettings);
       btnBannerSettings.addEventListener('click', openSettings);
+      btnTestConnection.addEventListener('click', testServerConnection);
 
       btnPresetLocal.addEventListener('click', () => {
         inputServerUrl.value = 'http://localhost:3000';
@@ -388,10 +494,15 @@
       });
 
       btnSaveSettings.addEventListener('click', () => {
-        const newUrl = inputServerUrl.value.trim().replace(/\/+$/, ''); // Remove trailing slashes
-        localStorage.setItem(STORAGE_KEY, newUrl);
-        closeSettings();
-        connectSocket(newUrl);
+        const cleanUrl = formatServerUrl(inputServerUrl.value);
+        if (cleanUrl) {
+          localStorage.setItem(STORAGE_KEY, cleanUrl);
+          inputServerUrl.value = cleanUrl;
+          closeSettings();
+          connectSocket(cleanUrl);
+        } else {
+          showTestResult('error', '⚠️ Please enter a valid URL.');
+        }
       });
 
       // Vibration feedback helper
@@ -401,22 +512,28 @@
         }
       }
 
-      // Connect or Reconnect Socket.IO
+      // Connect or Reconnect Socket.IO with fallback resilience
       function connectSocket(targetUrl) {
         if (socket) {
-          socket.disconnect();
+          try {
+            socket.disconnect();
+            socket.close();
+          } catch(e) {}
           socket = null;
         }
 
-        const serverUrl = targetUrl !== undefined ? targetUrl : getResolvedServerUrl();
+        const rawUrl = targetUrl !== undefined ? targetUrl : getResolvedServerUrl();
+        const serverUrl = formatServerUrl(rawUrl);
 
-        // If on Vercel and no server URL is set, prompt user
-        if (!serverUrl && window.location.hostname.includes('vercel.app')) {
-          setConnectionStatus(false, 'SET RENDER URL');
+        // If on Vercel and no server URL is configured, highlight settings
+        if (!serverUrl && (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('vercel.dev'))) {
+          setConnectionStatus(false, 'CLICK ⚙️ TO SET URL');
+          settingsDot.classList.remove('hidden');
           openSettings();
           return;
         }
 
+        settingsDot.classList.add('hidden');
         setConnectionStatus(false, 'CONNECTING...');
 
         // Start cold-start reminder timer
@@ -424,16 +541,19 @@
         coldStartTimeout = setTimeout(() => {
           if (!isConnected) {
             coldStartBanner.classList.remove('hidden');
+            setConnectionStatus(false, 'WAKING UP SERVER...');
           }
-        }, 4000);
+        }, 3500);
 
         try {
           const socketOptions = {
-            transports: ['websocket', 'polling'], // Fallback for maximum cross-origin compatibility
+            // Polling first wakes up Render's HTTP container, then smoothly upgrades to WebSocket
+            transports: ['polling', 'websocket'],
             reconnection: true,
             reconnectionAttempts: Infinity,
-            reconnectionDelay: 1500,
-            timeout: 10000
+            reconnectionDelay: 2000,
+            reconnectionDelayMax: 5000,
+            timeout: 45000 // 45s timeout to accommodate Render cold start
           };
 
           socket = serverUrl ? io(serverUrl, socketOptions) : io(socketOptions);
@@ -443,7 +563,7 @@
             clearTimeout(coldStartTimeout);
             coldStartBanner.classList.add('hidden');
             setConnectionStatus(true, 'ONLINE');
-            console.log('[SOCKET] Connected to:', serverUrl || 'origin', 'ID:', socket.id);
+            console.log('[SOCKET] ✅ Connected to:', serverUrl || 'origin', 'ID:', socket.id);
           });
 
           socket.on('disconnect', (reason) => {
@@ -455,8 +575,8 @@
 
           socket.on('connect_error', (err) => {
             isConnected = false;
-            setConnectionStatus(false, 'WAKING UP / ERR');
-            console.warn('[SOCKET] Connection attempt error:', err.message);
+            console.warn('[SOCKET] Connect error:', err.message);
+            setConnectionStatus(false, 'WAKING UP (RETRYING)');
           });
 
           // Latency heartbeat
@@ -469,7 +589,7 @@
           });
 
         } catch (e) {
-          console.error('Socket init failure:', e);
+          console.error('[SOCKET] Init failure:', e);
           setConnectionStatus(false, 'INIT ERROR');
         }
       }
@@ -620,7 +740,6 @@
         });
 
         btn.addEventListener('mouseleave', (e) => {
-          e.preventDefault();
           if (activeDirection === dir) {
             handleRelease(dir);
           }

@@ -16,14 +16,14 @@
 #include <ESP8266WiFi.h>
 #include <SocketIoClient.h>
 
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid = "Deepanshu's S23";
+const char* password = "11223345";
 
 // Choose connection target:
 // OPTION A: Local Server (Default for lowest latency testing)
-const char* server_host = "192.168.1.100"; 
-const int server_port = 3000;
-const bool use_ssl = false;
+const char* server_host = "car-controller.onrender.com"; 
+const int server_port = 443;
+const bool use_ssl = true;
 
 // OPTION B: Render Cloud Server (Remote control over cellular/internet)
 // const char* server_host = "your-app-name.onrender.com"; 
@@ -123,11 +123,11 @@ void setup() {
   webSocket.on("car_command", onCommand);
 
   // Connect to Node.js server (HTTP or HTTPS/WSS)
-  if (use_ssl) {
+if (use_ssl) {
     webSocket.beginSSL(server_host, server_port);
     Serial.printf("Connecting to Secure Cloud Socket.IO at wss://%s:%d...\n", server_host, server_port);
   } else {
-    webSocket.begin(server_host, server_port);
+    webSocket.begin(server_host, server_port); // FIXED: changed beginSSL to begin, and server_ip to server_host
     Serial.printf("Connecting to Local Socket.IO at ws://%s:%d...\n", server_host, server_port);
   }
 }
@@ -135,4 +135,3 @@ void setup() {
 void loop() {
   webSocket.loop();
 }
-

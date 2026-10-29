@@ -138,3 +138,4 @@ Open [`esp8266_firmware_example.ino`](esp8266_firmware_example.ino) in Arduino I
 | ✅ | Vercel Frontend | Opens full screen with dark theme, no pull-to-refresh, no zoom |
 | ✅ | Dead-Man Switch | Lifting thumb immediately sends `STOP` and turns the active HUD red |
 | ✅ | Cross-Origin Socket | Latency badge displays live round-trip ping time (e.g., `25-60 ms`) |
+
